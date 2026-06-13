@@ -1,0 +1,28 @@
+{
+  "name": "100-incredible-trips",
+  "version": "1.0.0",
+  "description": "飞猪 100种不可思议旅行",
+  "scripts": {
+    "dev:backend": "cd backend && python main.py",
+    "dev:frontend": "cd frontend && npm run dev",
+    "test:unit": "cd backend && pytest tests/test_models.py tests/test_services.py -v",
+    "test:integration": "cd backend && pytest tests/test_api.py -v",
+    "test:backend": "cd backend && pytest tests/ -v --cov=. --cov-report=term",
+    "test:e2e": "npx playwright test",
+    "test:all": "npm run test:backend && npm run test:e2e"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "cheerio": "^1.2.0",
+    "express": "^5.2.1",
+    "node-fetch": "^3.3.2",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "sqlite3": "^6.0.1",
+    "swiper": "^12.2.0",
+    "tailwindcss": "^4.3.1"
+  }
+}

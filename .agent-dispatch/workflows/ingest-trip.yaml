@@ -1,0 +1,126 @@
+# Workflow: 新体验自动入库流水线
+# 触发: agent-dispatch test trip-ingest "<景点名称>"
+# 或: 用户在 Claude Code 中输入 "加一条 <景点> 的体验"
+
+name: ingest-trip
+description: "自动入库新旅行体验：并行搜索 → 串行加工 → 数据库写入"
+version: "1.0"
+
+triggers:
+  - pattern: "加一条\\s+(.+?)\\s+的体验"
+    capture: destination
+  - pattern: "添加体验\\s+(.+)"
+    capture: destination
+  - manual: "agent-dispatch test trip-ingest"
+
+phases:
+  - name: parallel_search
+    description: "并行搜索 Wikipedia / Pexels / NatGeo / 中文攻略"
+    type: parallel
+    tasks:
+      - id: wikipedia
+        tool: Bash
+        command: |
+          QUERY=$(echo "$DESTINATION" | python3 -c "import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read().strip()))")
+          curl -s "https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${QUERY}&format=json&origin=*&srlimit=3"
+        output: wiki_results
+
+      - id: pexels_images
+        tool: Bash
+        command: |
+          PEXELS_KEY=$(python3 -c "import json;c=json.load(open('/Users/apple/.claude.json'));print(c['mcpServers']['pexels']['env']['PEXELS_API_KEY'])")
+          curl -s -H "Authorization: ${PEXELS_KEY}" "https://api.pexels.com/v1/search?query=${DESTINATION}&orientation=landscape&per_page=5"
+        output: pexels_results
+
+      - id: natgeo
+        tool: Bash
+        command: |
+          echo "{\"searchUrl\": \"https://www.nationalgeographic.com/search?q=$(echo $DESTINATION | python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read().strip()))')\"}"
+        output: natgeo_results
+
+      - id: chinese_guides
+        tool: WebSearch
+        query: "${DESTINATION} 旅行攻略 小众体验"
+        output: guide_results
+
+  - name: pipeline_process
+    description: "串行加工：生成内容 → 提取配色 → 下载图片 → 事实校验"
+    type: pipeline
+    steps:
+      - id: generate_content
+        description: "LLM 生成 Markdown 内容 + 情感故事"
+        prompt: |
+          根据以下信息，为旅行体验"${DESTINATION}"生成：
+          1. Markdown 格式的 content（体验概述、行程亮点、适合人群）
+          2. 情感向的 story（背后故事，300-500字）
+
+          Wikipedia: ${wiki_results}
+          中文攻略: ${guide_results}
+
+          输出 JSON: {"title": "...", "subtitle": "...", "content": "...", "story": "..."}
+
+      - id: extract_colors
+        description: "用 ColorThief 从首张 Pexels 图片提取主色"
+        tool: Bash
+        command: |
+          IMG_URL=$(echo '${pexels_results}' | python3 -c "import json,sys;d=json.load(sys.stdin);print(d['photos'][0]['src']['large'])")
+          curl -sL "$IMG_URL" -o /tmp/trip_img.jpg
+          python3 -c "
+          from colorthief import ColorThief
+          ct = ColorThief('/tmp/trip_img.jpg')
+          d = ct.get_color(quality=1)
+          p = ct.get_palette(color_count=5, quality=1)
+          import json
+          print(json.dumps({'dominant': '#%02X%02X%02X' % d, 'palette': ['#%02X%02X%02X' % c for c in p]}))
+          "
+
+      - id: download_image
+        description: "下载图片到 public/images/"
+        tool: Bash
+        command: |
+          NEXT_ID=$(curl -s http://localhost:8000/api/trips | python3 -c "import json,sys;print(json.load(sys.stdin)['total']+1)")
+          IMG_URL=$(echo '${pexels_results}' | python3 -c "import json,sys;print(json.load(sys.stdin)['photos'][0]['src']['large'])")
+          curl -sL "$IMG_URL" -o "/Users/apple/Desktop/ClaudeCode/100-incredible-trips/frontend/public/images/${NEXT_ID}_auto.jpg"
+          echo "/images/${NEXT_ID}_auto.jpg"
+
+      - id: fact_check
+        description: "交叉验证 Wikipedia 与中文攻略的一致性"
+        prompt: |
+          对比 Wikipedia 摘要和中文攻略，检查：
+          1. 地名/国家是否一致
+          2. 体验描述是否存在矛盾
+          3. 如有冲突，标注可靠性等级
+
+          Wikipedia: ${wiki_results}
+          攻略: ${guide_results}
+
+  - name: database_write
+    description: "通过 POST /api/trips 写入数据库"
+    steps:
+      - id: insert_trip
+        tool: Bash
+        command: |
+          curl -s -X POST http://localhost:8000/api/trips \
+            -H 'Content-Type: application/json' \
+            -d "{
+              \"title\": \"${DESTINATION}\",
+              \"destination\": \"${DESTINATION}\",
+              \"country\": \"\",
+              \"experience_type\": \"adventure\",
+              \"uniqueness_score\": 8,
+              \"visual_style\": \"ocean\",
+              \"content\": \"生成中...\",
+              \"difficulty\": \"moderate\",
+              \"image_source\": \"Pexels\",
+              \"image_source_url\": \"\"
+            }"
+        output: trip_response
+
+output:
+  format: json
+  schema:
+    trip_id: number
+    title: string
+    image_path: string
+    colors: object
+    sources: array

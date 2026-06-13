@@ -1,0 +1,405 @@
+openapi: "3.0.3"
+info:
+  title: "飞猪「100种不可思议旅行」API"
+  description: |
+    为"100种不可思议旅行"产品页提供数据服务。
+
+    **核心能力:**
+    - 分页列表 + 多维度组合筛选
+    - 单条详情
+    - 首页随机推荐
+
+    **设计约束:**
+    - 数据库: SQLite (via SQLAlchemy)
+    - 体验总数上限: 100 条
+    - 所有文本字段支持中文
+  version: "1.0.0"
+  contact:
+    name: "飞猪后端团队"
+    email: "backend@feizhu.com"
+
+servers:
+  - url: "http://localhost:8000"
+    description: "本地开发环境"
+  - url: "https://api.feizhu.com/v1"
+    description: "生产环境"
+
+tags:
+  - name: trips
+    description: "旅行体验资源"
+
+# ── 路径定义 ─────────────────────────────────────────────────────────────────
+
+paths:
+
+  # ── 1. 分页列表 ────────────────────────────────────────────────────────────
+  /api/trips:
+    get:
+      tags: [trips]
+      summary: "分页获取旅行体验列表"
+      description: |
+        支持多条件组合筛选，按 uniqueness_score DESC 排序（小众优先）。
+      operationId: listTrips
+      parameters:
+        - name: type
+          in: query
+          required: false
+          description: "体验类型筛选"
+          schema:
+            $ref: "#/components/schemas/ExperienceType"
+        - name: min_uniqueness
+          in: query
+          required: false
+          description: "最小小众程度（包含）"
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10
+            example: 7
+        - name: visual_style
+          in: query
+          required: false
+          description: "视觉风格筛选"
+          schema:
+            $ref: "#/components/schemas/VisualStyle"
+        - name: search
+          in: query
+          required: false
+          description: "全文搜索 — 匹配标题、副标题、目的地、国家、内容"
+          schema:
+            type: string
+            maxLength: 200
+            example: "极光"
+        - name: page
+          in: query
+          required: false
+          description: "页码，从 1 开始"
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          description: "每页条数"
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: "分页结果"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TripListResponse"
+              example:
+                items:
+                  - id: 1
+                    title: "北极圈玻璃穹顶下追逐极光"
+                    subtitle: "躺在温暖被窝里看欧若拉女神的裙摆"
+                    cover_image: "https://cdn.feizhu.com/images/trips/aurora-dome.jpg"
+                    destination: "特罗姆瑟"
+                    country: "挪威"
+                    experience_type: "nature"
+                    uniqueness_score: 9
+                    visual_style: "dark"
+                    content: "# 极光之夜\n\n在北极圈内的玻璃穹顶小屋中..."
+                    story: "传说中，极光是先祖灵魂在天空舞蹈..."
+                    best_season: "10月–3月"
+                    duration_hours: 48.0
+                    difficulty: "easy"
+                    created_at: "2026-01-15T08:00:00Z"
+                    updated_at: "2026-06-01T12:00:00Z"
+                total: 5
+                page: 1
+                limit: 20
+                pages: 1
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  # ── 2. 随机推荐 ────────────────────────────────────────────────────────────
+  /api/trips/random:
+    get:
+      tags: [trips]
+      summary: "随机推荐一条旅行体验"
+      description: |
+        首页 Hero 区使用。从全量 100 条中随机选取一条。
+
+        **注意:** 此路由必须在 `/api/trips/{id}` 之前注册，
+        否则 FastAPI 会将 "random" 当作 id 参数解析。
+      operationId: getRandomTrip
+      responses:
+        "200":
+          description: "随机推荐结果"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TripResponse"
+              example:
+                id: 5
+                title: "徒步雷龙之路，夜宿悬崖寺庙"
+                subtitle: "在不丹秘境中与雷声同行"
+                cover_image: "https://cdn.feizhu.com/images/trips/druk-path.jpg"
+                destination: "帕罗–廷布"
+                country: "不丹"
+                experience_type: "adventure"
+                uniqueness_score: 10
+                visual_style: "minimal"
+                content: "# 雷龙之路\n\n这是一条穿越不丹心脏地带的古道..."
+                story: "相传雷龙之路是守护神 Druk 的居所..."
+                best_season: "3月–5月, 9月–11月"
+                duration_hours: 120.0
+                difficulty: "hard"
+                created_at: "2026-01-15T08:00:00Z"
+                updated_at: "2026-06-01T12:00:00Z"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── 3. 单条详情 ────────────────────────────────────────────────────────────
+  /api/trips/{id}:
+    get:
+      tags: [trips]
+      summary: "获取单条旅行体验详情"
+      description: "根据 ID 获取完整信息，包括背后的故事。"
+      operationId: getTripById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: "旅行体验 ID"
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+      responses:
+        "200":
+          description: "体验详情"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TripResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+# ── 组件定义 ─────────────────────────────────────────────────────────────────
+
+components:
+
+  # ── Schema ──────────────────────────────────────────────────────────────────
+  schemas:
+
+    ExperienceType:
+      type: string
+      enum: [adventure, cultural, nature, food, art, wellness]
+      description: |
+        - `adventure` — 探险
+        - `cultural`  — 人文
+        - `nature`    — 自然
+        - `food`      — 美食
+        - `art`       — 艺术
+        - `wellness`  — 康养
+
+    VisualStyle:
+      type: string
+      enum: [dark, vibrant, minimal, retro, futuristic]
+      description: |
+        - `dark`       — 暗黑风（极光、洞穴、星空主题）
+        - `vibrant`    — 鲜活风（热带、节庆、市集主题）
+        - `minimal`    — 极简风（禅修、雪山、荒漠主题）
+        - `retro`      — 复古风（古城、手工艺、蒸汽火车主题）
+        - `futuristic` — 未来风（太空、科技、霓虹都市主题）
+
+    Difficulty:
+      type: string
+      enum: [easy, moderate, hard]
+      description: |
+        - `easy`    — 轻松（无需体能准备）
+        - `moderate` — 中等（需要基础体能）
+        - `hard`    — 困难（需要专业训练/向导陪同）
+
+    TripBase:
+      type: object
+      required:
+        - title
+        - destination
+        - country
+        - experience_type
+        - uniqueness_score
+        - visual_style
+        - content
+        - difficulty
+      properties:
+        title:
+          type: string
+          maxLength: 255
+          description: "体验标题"
+          example: "北极圈玻璃穹顶下追逐极光"
+        subtitle:
+          type: string
+          maxLength: 255
+          nullable: true
+          description: "副标题/一句话亮点"
+          example: "躺在温暖被窝里看欧若拉女神的裙摆"
+        cover_image:
+          type: string
+          maxLength: 500
+          nullable: true
+          description: "封面图 URL"
+          example: "https://cdn.feizhu.com/images/trips/aurora-dome.jpg"
+        destination:
+          type: string
+          maxLength: 255
+          description: "目的地"
+          example: "特罗姆瑟"
+        country:
+          type: string
+          maxLength: 100
+          description: "国家"
+          example: "挪威"
+        experience_type:
+          $ref: "#/components/schemas/ExperienceType"
+        uniqueness_score:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: "小众程度 (1=大众景点, 10=几乎无人知晓)"
+          example: 9
+        visual_style:
+          $ref: "#/components/schemas/VisualStyle"
+        content:
+          type: string
+          description: "详细描述（Markdown 格式富文本）"
+          example: "# 极光之夜\n\n在北极圈内的玻璃穹顶小屋中，你将..."
+        story:
+          type: string
+          nullable: true
+          description: "背后故事 — 提供情感连接，由编辑团队采编"
+          example: "传说中，极光是先祖灵魂在天空起舞..."
+        best_season:
+          type: string
+          maxLength: 100
+          nullable: true
+          description: "最佳体验季节"
+          example: "10月–3月"
+        duration_hours:
+          type: number
+          exclusiveMinimum: 0
+          nullable: true
+          description: "体验时长（小时）"
+          example: 48.0
+        difficulty:
+          $ref: "#/components/schemas/Difficulty"
+
+    TripResponse:
+      allOf:
+        - $ref: "#/components/schemas/TripBase"
+        - type: object
+          required: [id, created_at, updated_at]
+          properties:
+            id:
+              type: integer
+              description: "唯一标识"
+              example: 1
+            created_at:
+              type: string
+              format: date-time
+              description: "创建时间 (UTC)"
+              example: "2026-01-15T08:00:00Z"
+            updated_at:
+              type: string
+              format: date-time
+              description: "最后更新时间 (UTC)"
+              example: "2026-06-01T12:00:00Z"
+
+    TripListResponse:
+      type: object
+      required: [items, total, page, limit, pages]
+      properties:
+        items:
+          type: array
+          description: "当前页体验列表"
+          items:
+            $ref: "#/components/schemas/TripResponse"
+        total:
+          type: integer
+          description: "符合条件的总记录数"
+          example: 100
+        page:
+          type: integer
+          description: "当前页码"
+          example: 1
+        limit:
+          type: integer
+          description: "每页条数"
+          example: 20
+        pages:
+          type: integer
+          description: "总页数"
+          example: 5
+
+    ErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
+          description: "错误描述"
+          example: "体验不存在"
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+            properties:
+              loc:
+                type: array
+                items:
+                  type: string
+                description: "错误位置"
+              msg:
+                type: string
+                description: "错误信息"
+              type:
+                type: string
+                description: "错误类型"
+
+  # ── 通用响应 ───────────────────────────────────────────────────────────────
+  responses:
+    NotFound:
+      description: "资源不存在"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            detail: "体验不存在"
+
+    BadRequest:
+      description: "请求参数错误"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            detail: "参数 'page' 必须大于 0"
+
+    ValidationError:
+      description: "请求参数校验失败"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationErrorResponse"
+          example:
+            detail:
+              - loc: ["query", "min_uniqueness"]
+                msg: "ensure this value is greater than or equal to 1"
+                type: "type_error.integer"

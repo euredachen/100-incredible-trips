@@ -18,7 +18,7 @@ export default function ThemeToggle({ theme, onToggle }) {
         color: 'var(--color-text)',
       }}
       whileTap={{ scale: 0.9 }}
-      aria-label={isDark ? '切换明亮模式' : '切换暗黑模式'}
+      aria-label={isDark ? '切换明亮模式' : '切换深色模式'}
     >
       {isDark ? (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"

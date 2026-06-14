@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   CSS 变量默认值（暗色 — JS 运行时覆盖）
+   CSS 变量默认值（深色 — JS 运行时覆盖）
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
@@ -47,7 +47,7 @@
   }
   ::selection { background: var(--accent-warm); color: #fff; }
 
-  /* 暗黑模式 — prose 标题米黄 · 正文纯白 */
+  /* 深色模式 — prose 标题米黄 · 正文纯白 */
   .dark .prose h2, .dark .prose h3, .dark .prose h4,
   body.dark .prose h2, body.dark .prose h3, body.dark .prose h4 { color: #F5E6A0 !important; }
   .dark .prose p, .dark .prose li,

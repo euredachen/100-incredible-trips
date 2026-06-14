@@ -6,7 +6,7 @@ export function ThemeProvider({ children }) {
   const [dark, setDark] = useState(() => {
     const stored = localStorage.getItem('theme');
     if (stored) return stored === 'dark';
-    return true; // 默认暗色
+    return true; // 默认深色
   });
 
   useEffect(() => {

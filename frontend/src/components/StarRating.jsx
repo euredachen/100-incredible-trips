@@ -1,7 +1,7 @@
 import React from 'react';
 
 // uniqueness_score 1-10 → 1-5 星，支持半星
-// 填充颜色跟随 CSS 变量 --color-star（明亮=indigo, 暗黑=星光）
+// 填充颜色跟随 CSS 变量 --color-star（明亮=indigo, 深色=星光）
 
 function StarIcon({ filled, half }) {
   const starColor = 'var(--color-star)';

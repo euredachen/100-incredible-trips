@@ -2,7 +2,7 @@
  * 双主题完整配色方案
  *
  * ☀️ 明亮 — indigo蓝 星级+景观高亮 + 巴哈马碧蓝海洋背景
- * 🌙 暗黑 — 星光色 星级 + 极地雪原极光背景 + 深色文字
+ * 🌙 深色 — 星光色 星级 + 极地雪原极光背景 + 浅色文字
  */
 
 export const themes = {
@@ -39,7 +39,7 @@ export const themes = {
 
   dark: {
     name: 'dark',
-    label: '🌙 暗黑',
+    label: '🌙 深色',
     bgImage: '/images/aurora-bg.jpg',
 
     colors: {
@@ -49,7 +49,7 @@ export const themes = {
 
       accentWarm:       '#FF6B35',
       accentWarmLight:  'rgba(255, 107, 53, 0.15)',
-      accentCool:       '#00D4FF',  // 冰湖蓝 — 暗色底重点突出
+      accentCool:       '#00D4FF',  // 冰湖蓝 — 深色底重点突出
       accentCoolLight:  'rgba(0, 212, 255, 0.12)',
 
       surface:          'rgba(5, 15, 4, 0.10)',

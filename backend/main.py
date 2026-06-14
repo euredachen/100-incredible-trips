@@ -24,6 +24,7 @@ from typing import Generator
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from urllib.parse import quote
@@ -111,8 +112,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",   # Vite 开发服务器
-        "http://localhost:3000",   # Next.js / 备选
+        "http://localhost:3000",
         "http://127.0.0.1:5173",
+        "https://100-incredible-trips.onrender.com",  # Render 生产环境
     ],
     allow_credentials=True,
     allow_methods=["GET", "OPTIONS"],  # 当前阶段仅需 GET
@@ -498,7 +500,27 @@ def retry_pending_tasks():
     return {"results": results, "pending": sum(1 for t in tasks if t["status"] == "pending")}
 
 
-# ── 直接运行支持 ────────────────────────────────────────────────────────────
+# ── 生产环境：托管前端静态文件 ──────────────────────────────────────────
+
+_frontend_dist = _backend_dir.parent / "frontend" / "dist"
+if _frontend_dist.exists():
+    from fastapi.responses import FileResponse
+
+    # SPA 兜底：非 /api 路径的全静态文件查找 → fallback 到 index.html
+    @app.get("/{full_path:path}")
+    async def spa_fallback(full_path: str):
+        # 不拦截 API 请求
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404)
+        # 先尝试直接返回静态文件
+        file_path = _frontend_dist / full_path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        # SPA fallback
+        index_path = _frontend_dist / "index.html"
+        if index_path.exists():
+            return FileResponse(index_path)
+        raise HTTPException(status_code=404, detail="前端未构建，请运行 npm run build")
 
 if __name__ == "__main__":
     import uvicorn

@@ -253,12 +253,22 @@ def _extract_landscape_keywords(query):
     return ' '.join(keywords) if keywords else ''
 
 
-def pexels_search(query, per_page=5):
-    """Pexels 图片搜索"""
+def _get_pexels_key():
+    """获取 Pexels API key — 优先环境变量，其次 ~/.claude.json"""
+    key = os.environ.get('PEXELS_API_KEY', '')
+    if key:
+        return key
     try:
         c = _json_load('~/.claude.json')
-        key = c['mcpServers']['pexels']['env']['PEXELS_API_KEY']
+        return c['mcpServers']['pexels']['env']['PEXELS_API_KEY']
     except Exception:
+        return ''
+
+
+def pexels_search(query, per_page=5):
+    """Pexels 图片搜索"""
+    key = _get_pexels_key()
+    if not key:
         return None
 
     url = (

@@ -51,8 +51,6 @@
   body.dark .prose h2, body.dark .prose h3, body.dark .prose h4 { color: #F5E6A0 !important; }
   .dark .prose p, .dark .prose li,
   body.dark .prose p, body.dark .prose li { color: #FFFFFF !important; }
-  .dark .prose strong, .dark .prose em,
-  body.dark .prose strong, body.dark .prose em { color: #F5E6A0 !important; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

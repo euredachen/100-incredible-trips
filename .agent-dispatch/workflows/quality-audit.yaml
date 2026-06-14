@@ -1,0 +1,69 @@
+# Workflow: 内容质量巡检
+name: quality-audit
+description: "定时巡检：图片/链接/文案/SEO → 自动修复 → 报告"
+version: "1.0"
+
+triggers:
+  - cron: "0 2 * * *"
+  - pattern: "巡检内容质量"
+  - manual: "agent-dispatch test quality-audit"
+
+phases:
+  - name: scan_all_trips
+    description: "扫描全部 trips 表的每条记录"
+    type: single
+    source: "GET /api/trips?limit=100"
+    output: trips_data
+
+  - name: parallel_checks
+    description: "对每条 trip 执行 4 项并行检查"
+    type: pipeline
+    items: trips_data.items
+    stages:
+      - id: check_image
+        description: "检查 cover_image 有效性"
+        action: |
+          如果 cover_image 以 /images/ 开头:
+            ls /frontend/public{cover_image} → 存在/不存在
+          如果是外部 URL:
+            curl -sI {cover_image} → HTTP 200/404
+          如果失效:
+            自动搜索 Pexels → 下载 → 更新 DB
+
+      - id: check_links
+        description: "检查外部链接有效性"
+        action: |
+          GET /api/trips/{id}/external-sources
+          对每个 source.url:
+            curl -sI {url} → HTTP 状态
+          如果 404:
+            重新搜索 Wikipedia → 更新
+
+      - id: check_content
+        description: "检查文案质量"
+        action: |
+          if len(content) < 100: 标记 "内容过短"
+          if not story: 标记 "缺少故事"
+          if not subtitle: 标记 "缺少副标题"
+          if subtitle == title: 标记 "副标题重复标题"
+
+      - id: check_seo
+        description: "检查 SEO 元数据"
+        action: |
+          if len(title) < 20 or len(title) > 60: 标记 "标题长度异常"
+          if not subtitle: 标记 "缺少 description"
+          检查 content 是否有 h2 标题结构
+
+  - name: generate_report
+    description: "生成巡检报告"
+    output:
+      - /data/audit-report.json
+      - /data/auto-fix-log.json
+
+  - name: auto_fix
+    description: "自动修复可处理的问题"
+    actions:
+      - "失效图片 → Pexels 搜索替换"
+      - "失效链接 → Wikipedia 重新搜索"
+      - "内容过短 → 调用 LLM 补全"
+      - "缺少副标题 → 调用 LLM 生成"

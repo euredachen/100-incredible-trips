@@ -7,12 +7,13 @@ export default function SubmitForm({ onCreated }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [stage, setStage] = useState(-1);  // -1=idle, 0=searching/building, 1=countdown
+  const [stage, setStage] = useState(-1);  // -1=idle, 0=searching, 1=countdown, 2=timeout
   const [progress, setProgress] = useState(0);  // 0-100
   const [countdown, setCountdown] = useState(3);
   const [error, setError] = useState(null);
   const pollRef = useRef(null);
   const countdownRef = useRef(null);
+  const TIMEOUT_MS = 90000;  // 90 秒超时
 
   useEffect(() => () => {
     if (pollRef.current) clearTimeout(pollRef.current);
@@ -74,9 +75,22 @@ export default function SubmitForm({ onCreated }) {
       // 触发后台 enrichment
       fetch(`/api/trips/${trip.id}/enrich`, { method: 'POST' }).catch(() => {});
 
-      // 轮询 enrichment 完成状态
+      // 轮询 enrichment 完成状态（90 秒超时）
+      const startTime = Date.now();
       let prog = 10;
       const poll = async () => {
+        const elapsed = Date.now() - startTime;
+
+        // 超时 → 记录后台任务，显示友好提示
+        if (elapsed >= TIMEOUT_MS) {
+          setStage(2);
+          // 通知后端记录此任务，供后台重试
+          fetch(`/api/tasks/pending?trip_id=${trip.id}&query=${encodeURIComponent(query)}`, {
+            method: 'POST',
+          }).catch(() => {});
+          return;
+        }
+
         try {
           const r = await fetch(`/api/trips/${trip.id}`);
           const t = await r.json();
@@ -87,8 +101,9 @@ export default function SubmitForm({ onCreated }) {
             setProgress(100);
             setTimeout(startCountdown, 400);
           } else {
-            prog = Math.min(prog + 8, 95);
-            setProgress(prog);
+            // 进度条逼近 90%（剩余留给完成那一刻）
+            const pct = Math.min(10 + (elapsed / TIMEOUT_MS) * 85, 90);
+            setProgress(Math.round(pct));
             pollRef.current = setTimeout(poll, 1500);
           }
         } catch {
@@ -152,7 +167,7 @@ export default function SubmitForm({ onCreated }) {
               />
               <button
                 type="submit"
-                disabled={submitting || !name.trim() || stage === 0}
+                disabled={submitting || !name.trim() || stage === 0 || stage === 1}
                 className="px-6 py-2.5 rounded-full text-sm font-semibold text-white
                            transition-all disabled:opacity-40 shrink-0"
                 style={{ backgroundColor: 'var(--accent-warm)' }}
@@ -185,6 +200,20 @@ export default function SubmitForm({ onCreated }) {
                 className="mt-3 glass-card p-3 text-center">
                 <p className="text-sm" style={{ color: 'var(--color-text)' }}>
                   全部完成，<span style={{ fontWeight: 600 }}>{countdown}</span> 秒后自动刷新
+                </p>
+              </motion.div>
+            )}
+
+            {/* 超时 — 友好提示 */}
+            {stage === 2 && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                className="mt-3 glass-card p-5 text-center">
+                <p style={{ fontSize: '40px', marginBottom: '12px' }}>🛰️</p>
+                <p className="text-sm font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
+                  雷达暂未覆盖，已提交后台。过段时间再来看看吧～
+                </p>
+                <p className="text-xs" style={{ color: 'var(--color-text-secondary)', opacity: 0.6 }}>
+                  系统将自动重试，成功后第一时间为你生成专属页面
                 </p>
               </motion.div>
             )}

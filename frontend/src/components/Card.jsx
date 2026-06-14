@@ -75,7 +75,7 @@ export default function Card({ trip }) {
         </h3>
 
         <p className="text-sm mb-2" style={{ color: 'var(--color-text-secondary)' }}>
-          {trip.destination}，{trip.country}
+          📍 {[trip.destination, trip.country].filter(Boolean).join('，')}
         </p>
 
         <div className="flex items-center gap-2 mt-auto pt-3">

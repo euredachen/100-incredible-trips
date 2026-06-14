@@ -136,13 +136,14 @@ export default function TripDetailPage() {
               </h1>
 
               {trip.subtitle && (
-                <p className="text-lg sm:text-xl text-white/60 font-light max-w-2xl">
+                <p className="text-lg sm:text-xl font-light max-w-2xl"
+                   style={{ color: 'var(--color-text-secondary)' }}>
                   {trip.subtitle}
                 </p>
               )}
 
               <p className="text-white/40 text-sm mt-3">
-                📍 {trip.destination}，{trip.country}
+                📍 {[trip.destination, trip.country].filter(Boolean).join('，')}
                 {trip.best_season && ` · 🗓️ ${trip.best_season}`}
               </p>
             </motion.div>
@@ -234,7 +235,7 @@ export default function TripDetailPage() {
 
               {/* ── 图片来源 ──────────────────────────────────────────── */}
               {trip.image_source && (
-                <div className="mt-5 pt-4" style={{ borderTop: `0.5px solid var(--color-card-border)` }}>
+                <div className="mt-5 pt-4" style={{ borderTop: `0.5px solid var(--color-border)` }}>
                   <p className="text-xs mb-1" style={{ color: 'var(--color-text-secondary)' }}>
                     📷 图片来源
                   </p>
@@ -257,7 +258,7 @@ export default function TripDetailPage() {
               )}
 
               {/* ── 飞猪预订按钮 ────────────────────────────────── */}
-              <div className="mt-5 pt-4" style={{ borderTop: `0.5px solid var(--color-card-border)` }}>
+              <div className="mt-5 pt-4" style={{ borderTop: `0.5px solid var(--color-border)` }}>
                 <a
                   href={`https://www.fliggy.com/search?q=${encodeURIComponent(trip.destination + ' ' + trip.country + ' 旅游')}`}
                   target="_blank"
@@ -392,7 +393,7 @@ function ExternalSources({ tripId }) {
   };
 
   return (
-    <div className="mt-5 pt-4" style={{ borderTop: `0.5px solid var(--color-card-border)` }}>
+    <div className="mt-5 pt-4" style={{ borderTop: `0.5px solid var(--color-border)` }}>
       <div className="flex items-center justify-between mb-3">
         <h4 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
           🔗 外部来源
@@ -440,7 +441,7 @@ function ExternalSources({ tripId }) {
             onChange={(e) => setTitle(e.target.value)}
             className="w-full px-3 py-1.5 rounded-lg text-sm border"
             style={{
-              borderColor: 'var(--color-card-border)',
+              borderColor: 'var(--color-border)',
               background: 'var(--color-card-bg)',
               color: 'var(--color-text)',
             }}
@@ -452,7 +453,7 @@ function ExternalSources({ tripId }) {
             onChange={(e) => setUrl(e.target.value)}
             className="w-full px-3 py-1.5 rounded-lg text-sm border"
             style={{
-              borderColor: 'var(--color-card-border)',
+              borderColor: 'var(--color-border)',
               background: 'var(--color-card-bg)',
               color: 'var(--color-text)',
             }}

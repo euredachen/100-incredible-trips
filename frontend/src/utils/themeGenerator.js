@@ -58,7 +58,7 @@ export const themes = {
       nav:              'rgba(5, 15, 4, 0.70)',  // 70% 不透明度
 
       text:             '#FFFFFF',  // 纯白 — 正文高可读
-      textSecondary:    '#B0ACA5',  // 灰米
+      textSecondary:    '#E8D5A0',  // 米黄
       heading:          '#F5E6A0',  // 浅黄 — 章节标题
 
       border:           'rgba(16, 185, 129, 0.12)',

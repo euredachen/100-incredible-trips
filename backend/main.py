@@ -14,6 +14,9 @@
 """
 
 import math
+import json
+import os
+import subprocess
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -29,6 +32,9 @@ from urllib.parse import quote
 _backend_dir = Path(__file__).resolve().parent
 if str(_backend_dir) not in sys.path:
     sys.path.insert(0, str(_backend_dir))
+
+# 数据库路径 — 始终相对于 backend 目录，不依赖 CWD
+_DB_PATH = f"sqlite:///{_backend_dir / 'trips.db'}"
 
 from models import (
     Base,
@@ -46,7 +52,7 @@ from schemas import (
 # ── 应用生命周期 ─────────────────────────────────────────────────────────────
 
 # 全局引擎 & 会话工厂（模块加载时创建一次）
-_engine = create_db_engine("sqlite:///./trips.db")
+_engine = create_db_engine(_DB_PATH)
 _SessionLocal = create_session_factory(_engine)
 
 
@@ -223,14 +229,19 @@ def enrich_trip(trip_id: int, request: Request, db: Session = Depends(get_db)):
     # 如果前端传了英文搜索词，用它；否则用 destination
     search_query = request.query_params.get("q") or trip.destination or trip.title
 
-    import subprocess, os
     script = os.path.join(os.path.dirname(__file__), "enrich.py")
     result = subprocess.run(
-        ["python3", script, str(trip_id), search_query],
-        capture_output=True, text=True, timeout=30
+        [sys.executable, script, str(trip_id), search_query],
+        capture_output=True, text=True, timeout=120
     )
 
     db.refresh(trip)
+
+    if result.returncode != 0:
+        raise HTTPException(
+            status_code=500,
+            detail=f"丰富流水线失败 (exit {result.returncode}): {result.stderr[:500]}"
+        )
 
     try:
         output = json.loads(result.stdout)
@@ -402,6 +413,89 @@ def get_external_sources(trip_id: int, db: Session = Depends(get_db)):
 def health_check():
     """简单健康检查端点。"""
     return {"status": "ok", "service": "100-incredible-trips"}
+
+
+# ── 前端埋点接收 ──────────────────────────────────────────────────────────
+
+@app.post("/api/analytics/event", tags=["system"])
+def analytics_event():
+    """接收前端 tracker 埋点事件（MVP 阶段仅确认收到）。"""
+    return {"status": "ok"}
+
+
+# ── 后台重试队列 ──────────────────────────────────────────────────────────
+
+_PENDING_FILE = _backend_dir / "pending_tasks.json"
+
+
+def _load_pending():
+    """加载待处理任务列表。"""
+    if _PENDING_FILE.exists():
+        return json.loads(_PENDING_FILE.read_text())
+    return []
+
+
+def _save_pending(tasks):
+    """保存待处理任务列表。"""
+    _PENDING_FILE.write_text(json.dumps(tasks, ensure_ascii=False, indent=2))
+
+
+@app.post("/api/tasks/pending", tags=["tasks"])
+def add_pending_task(trip_id: int = Query(...), query: str = Query("")):
+    """记录 enrich 失败的任务，供后台定时重试。"""
+    tasks = _load_pending()
+    # 避免重复
+    existing = [t for t in tasks if t.get("trip_id") == trip_id]
+    if not existing:
+        tasks.append({
+            "trip_id": trip_id,
+            "query": query,
+            "created_at": __import__("datetime").datetime.now().isoformat(),
+            "retry_count": 0,
+            "max_retries": 30,  # 最多重试 30 天
+            "status": "pending",
+        })
+        _save_pending(tasks)
+    return {"status": "ok", "pending_count": len(tasks)}
+
+
+@app.get("/api/tasks/pending", tags=["tasks"])
+def list_pending_tasks():
+    """查看待处理任务列表。"""
+    return {"tasks": _load_pending()}
+
+
+@app.post("/api/tasks/retry", tags=["tasks"])
+def retry_pending_tasks():
+    """重试所有 pending 任务（由 cron 每天 2:00 调用）。"""
+    tasks = _load_pending()
+    results = []
+
+    for task in tasks:
+        if task.get("status") != "pending":
+            continue
+        tid = task["trip_id"]
+        try:
+            result = subprocess.run(
+                [sys.executable, str(_backend_dir / "enrich.py"), str(tid), task.get("query", "")],
+                capture_output=True, text=True, timeout=120
+            )
+            if result.returncode == 0:
+                task["status"] = "completed"
+                results.append(f"trip#{tid}: ok")
+            else:
+                task["retry_count"] += 1
+                if task["retry_count"] >= task.get("max_retries", 30):
+                    task["status"] = "failed_permanent"
+                    results.append(f"trip#{tid}: 已达最大重试次数，需人工处理")
+                else:
+                    results.append(f"trip#{tid}: retry#{task['retry_count']} failed")
+        except Exception as e:
+            task["retry_count"] += 1
+            results.append(f"trip#{tid}: error {e}")
+
+    _save_pending(tasks)
+    return {"results": results, "pending": sum(1 for t in tasks if t["status"] == "pending")}
 
 
 # ── 直接运行支持 ────────────────────────────────────────────────────────────
